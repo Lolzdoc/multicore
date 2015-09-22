@@ -12,14 +12,34 @@
 
 
 int threads_started = 0; // Borde vara atomic annars data race
-const nr_threads = 4;
+const int nr_threads = 4;
 
 static double sec(void)
 {
-	struct timespec tp;
-	int i = clock_gettime(CLOCK_REALTIME,&tp);
-	return (double)tp.tv_nsec;
+	//struct timespec tp; // Change to timeofday?
+	//int i = clock_gettime(CLOCK_REALTIME,&tp);
+	//return (double)tp.tv_nsec;
+	printf("Hej Hej\n");
+	return 2;
 }
+
+
+static int cmp(const void* ap, const void* bp)
+{	
+	double a = *((double*)ap);
+	double b = *((double*)bp);
+	double diff = a - b;
+	if (diff < 0){
+		return -1;
+	} else if (diff == 0) {
+		return 0;
+	} else {
+		return 1;
+	}
+}
+
+
+
 
 struct data {
 	void* base;	// Array to sort.
@@ -33,36 +53,38 @@ struct data {
 
 
 
-void my_par_sort(void *parameter) {
+void *my_par_sort(void *parameter) {
 
 
 	if (threads_started >= nr_threads) {
-		qsort((*parameter).base,(*parameter).n,(*parameter).s,(*cmp)(const void*, const void*))
+		void* base = ((struct data*)parameter)->base;
+		size_t n = ((struct data*)parameter)->n;	// Number of elements in base.
+		size_t s = ((struct data*)parameter)->s;
+		qsort(&base,n,s,cmp);
 	} else {
-
+		printf("Started new thread");
 	struct data left_data; 
 	struct data right_data;
 
-	left_data.base = (*parameter).base;
-	left_data.n = (*parameter).n/2;
+	left_data.base = ((struct data*)parameter)->base;
+	left_data.n = ((struct data*)parameter)->n/2;
 
-	right_data.n = (*parameter).n - (*parameter).n/2;
-	right_data.base = ((*parameter).base + (*parameter).n/2);
+	right_data.n = ((struct data*)parameter)->n - ((struct data*)parameter)->n/2;
+	right_data.base = (((struct data*)parameter)->base + ((struct data*)parameter)->n/2);
 
-	left_data.s = right_data.s = (*parameter).s;
+	left_data.s = right_data.s = ((struct data*)parameter)->s;
 	//left_data.(*cmp)(const void*, const void*) = (*parameter).(*cmp)(const void*, const void*);
 	//right_data.(*cmp)(const void*, const void*) = (*parameter).(*cmp)(const void*, const void*);
 
 	pthread_t left;
-	pthread_t right;
-
-	pthread_create(&left, NULL, my_par_sort, &left_data);
-	pthread_create(&right, NULL, my_par_sort, &right_data);
-
-	threads_started += 2;
+	//pthread_t right;
+	threads_started++;
+	pthread_create(&left, NULL, my_par_sort, &left_data); 
+	//pthread_create(&right, NULL, my_par_sort, &right_data); // Start only one thread...
+	my_par_sort(&right_data);
 
 	 pthread_join(left, NULL);
-	 pthread_join(right, NULL);
+	// pthread_join(right, NULL);
 
 	}
 
@@ -85,19 +107,7 @@ void par_sort(
 }
 
 
-static int cmp(const void* ap, const void* bp)
-{	
-	double a = *ap;
-	double b = *bp;
-	double diff = a - b;
-	if (diff < 0){
-		return -1;
-	} else if (diff == 0) {
-		return 0;
-	} else {
-		return 1;
-	}
-}
+
 
 int main(int ac, char** av)
 {

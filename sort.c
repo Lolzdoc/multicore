@@ -11,16 +11,14 @@
 
 
 
-int threads_started = 0; // Borde vara atomic annars data race
-const int nr_threads = 4;
+_Atomic int threads_started = 0; // Borde vara atomic annars data race
+const int nr_threads = 8;
 
 static double sec(void)
 {
-	//struct timespec tp; // Change to timeofday?
-	//int i = clock_gettime(CLOCK_REALTIME,&tp);
-	//return (double)tp.tv_nsec;
-	printf("Hej Hej\n");
-	return 2;
+	struct timeval tv; // Change to timeofday?
+	gettimeofday(&tv,NULL);
+	return (double)(tv.tv_sec + tv.tv_usec/1000000);
 }
 
 
@@ -48,7 +46,14 @@ struct data {
 	int (*cmp)(const void*, const void*);
 };
 
-
+int my_random(int n) {
+	int a = rand(); //0 -> 32767 atleast
+	a = a % 10; // 0 -> 9
+	if (a == 0) {
+		a = 1;
+	}
+	return a;
+}
 
 
 
@@ -65,12 +70,13 @@ void *my_par_sort(void *parameter) {
 		printf("Started new thread");
 	struct data left_data; 
 	struct data right_data;
-
+	int a = my_random(((struct data*)parameter)->n);
 	left_data.base = ((struct data*)parameter)->base;
-	left_data.n = ((struct data*)parameter)->n/2;
+	left_data.n = ((struct data*)parameter)->n/a;
 
-	right_data.n = ((struct data*)parameter)->n - ((struct data*)parameter)->n/2;
-	right_data.base = (((struct data*)parameter)->base + ((struct data*)parameter)->n/2);
+	right_data.n = ((struct data*)parameter)->n - ((struct data*)parameter)->n/a;
+	right_data.base = (char*)(((struct data*)parameter)->base) + (int)(((struct data*)parameter)->n/a);
+
 
 	left_data.s = right_data.s = ((struct data*)parameter)->s;
 	//left_data.(*cmp)(const void*, const void*) = (*parameter).(*cmp)(const void*, const void*);
@@ -85,9 +91,10 @@ void *my_par_sort(void *parameter) {
 
 	 pthread_join(left, NULL);
 	// pthread_join(right, NULL);
-
+	 // Här ska det vara mer saker som sorterar de sorterade listorna
+	 
 	}
-
+	return 0;
 }
 
 
@@ -130,7 +137,8 @@ int main(int ac, char** av)
 #ifdef PARALLEL
 	par_sort(a, n, sizeof a[0], cmp);
 #else
-	qsort(a, n, sizeof a[0], cmp);
+	par_sort(a, n, sizeof a[0], cmp);
+	//qsort(a, n, sizeof a[0], cmp);
 #endif
 
 	end = sec();

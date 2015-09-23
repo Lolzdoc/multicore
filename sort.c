@@ -2,6 +2,7 @@
 #include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
+#include <string.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/times.h>
@@ -11,42 +12,40 @@
 
 
 
-_Atomic int threads_started = 0; // Borde vara atomic annars data race
-const int nr_threads = 8;
+_Atomic int threads_started = 1; // Borde vara atomic annars data race
+const int nr_threads = 1;
 
 static double sec(void)
 {
 	struct timeval tv; // Change to timeofday?
 	gettimeofday(&tv,NULL);
-	return (double)(tv.tv_sec + tv.tv_usec/1000000);
+	return (double)(tv.tv_sec + (double)tv.tv_usec/1000000);
 }
-
 
 static int cmp(const void* ap, const void* bp)
 {	
-	double a = *((double*)ap);
-	double b = *((double*)bp);
-	double diff = a - b;
-	if (diff < 0){
+		//printf("asd \n");
+	const double a = *(double*) ap;
+	const double b = *(double*) bp;
+
+	if (a < b){
 		return -1;
-	} else if (diff == 0) {
+	} else if (a == b) {
 		return 0;
 	} else {
 		return 1;
 	}
 }
 
-
-
-
 struct data {
 	void* base;	// Array to sort.
 	size_t n;	// Number of elements in base.
 	size_t s;	// Size of each element.
 	int (*cmp)(const void*, const void*);
+	int id;
 };
 
-int my_random(int n) {
+int my_random() {
 	int a = rand(); //0 -> 32767 atleast
 	a = a % 10; // 0 -> 9
 	if (a == 0) {
@@ -55,47 +54,100 @@ int my_random(int n) {
 	return a;
 }
 
+void sort(void *parameter) {
+	void* base = ((struct data*)parameter)->base;
+	size_t n = ((struct data*)parameter)->n;	// Number of elements in base.
+	size_t s = ((struct data*)parameter)->s;
+	int (*cmp)(const void*, const void*) = ((struct data*)parameter)->cmp;
+	//printf("%p %d %d\n", base, (int) n, (int) s);
+	qsort(base,n,s,cmp);
+}
+
+void merge(void* left_data,void* right_data) {
+
+	double* base_left = ((struct data*)left_data)->base;
+	size_t n_left = ((struct data*)left_data)->n;	// Number of elements in base.
+	double* base_right = ((struct data*)right_data)->base;
+	size_t n_right = ((struct data*)right_data)->n;
+
+	double* temp = malloc((n_left+n_right)*sizeof(double));
+	int index = 0;
+	int i = 0;
+	int j = 0;
+
+	while(i<n_left && j<n_right){
+
+			if(base_left[i] > base_right[j]){
+				temp[index] = base_right[j];
+				index++;
+				j++;
+			} else {
+				temp[index] = base_left[i];
+				index++;
+				i++;
+			}
+	}
+		while(i<n_left){
+			temp[index] = base_left[i];
+			index++;
+			i++;
+		}
+		while(j<n_right){
+			temp[index] = base_right[j];
+			index++;
+			j++;
+		}
+		//memcpy((temp+index*sizeof(double)),(base_left+i*sizeof(double)),(n_left-i)*sizeof(double));
 
 
+	memcpy(base_left,temp,(n_left+n_right)*sizeof(double));
+	free(temp);
+
+}
 
 void *my_par_sort(void *parameter) {
-
-
 	if (threads_started >= nr_threads) {
-		void* base = ((struct data*)parameter)->base;
-		size_t n = ((struct data*)parameter)->n;	// Number of elements in base.
-		size_t s = ((struct data*)parameter)->s;
-		qsort(&base,n,s,cmp);
+		//printf("max nr of threads reached %d\n",((struct data*)parameter)->id);
+		sort(parameter);
 	} else {
-		printf("Started new thread");
+	threads_started++; 
+	
 	struct data left_data; 
 	struct data right_data;
-	int a = my_random(((struct data*)parameter)->n);
-	left_data.base = ((struct data*)parameter)->base;
-	left_data.n = ((struct data*)parameter)->n/a;
+	left_data.id = threads_started;
+	right_data.id = ((struct data*)parameter)->id;
+	void* base = ((struct data*)parameter)->base;	
+	size_t n = ((struct data*)parameter)->n;	
+	size_t s = ((struct data*)parameter)->s;
+	int a = my_random();
 
-	right_data.n = ((struct data*)parameter)->n - ((struct data*)parameter)->n/a;
-	right_data.base = (char*)(((struct data*)parameter)->base) + (int)(((struct data*)parameter)->n/a);
+	left_data.base = base;
+	left_data.n = (int)(n/a);
 
+	right_data.n = n - (int)(n/a);
+	right_data.base = (double*)base + (int)n/a;
 
-	left_data.s = right_data.s = ((struct data*)parameter)->s;
-	//left_data.(*cmp)(const void*, const void*) = (*parameter).(*cmp)(const void*, const void*);
-	//right_data.(*cmp)(const void*, const void*) = (*parameter).(*cmp)(const void*, const void*);
+	left_data.s = right_data.s = s;
+	left_data.cmp = ((struct data*)parameter)->cmp;
+	right_data.cmp = ((struct data*)parameter)->cmp;
 
 	pthread_t left;
-	//pthread_t right;
-	threads_started++;
-	pthread_create(&left, NULL, my_par_sort, &left_data); 
-	//pthread_create(&right, NULL, my_par_sort, &right_data); // Start only one thread...
+
+	
+	pthread_create(&left, NULL, my_par_sort, &left_data);
+	//printf("Started new thread %d\n",left_data.id);
 	my_par_sort(&right_data);
 
-	 pthread_join(left, NULL);
-	// pthread_join(right, NULL);
-	 // Här ska det vara mer saker som sorterar de sorterade listorna
-	 
+	pthread_join(left, NULL);
+
+	merge(&left_data,&right_data);
+
+
+
 	}
 	return 0;
 }
+
 
 
 void par_sort(
@@ -108,7 +160,9 @@ void par_sort(
 	d.base = base;
 	d.n = n;
 	d.s = s;
-	//d.(*cmp)(const void*, const void*) = (*cmp)(const void*, const void*);
+	d.cmp = cmp;
+	d.id = threads_started;
+	//printf("first id: %d\n", d.id);
 
 	my_par_sort(&d);
 }
@@ -132,6 +186,8 @@ int main(int ac, char** av)
 	for (i = 0; i < n; i++)
 		a[i] = rand();
 
+
+
 	start = sec();
 
 #ifdef PARALLEL
@@ -142,7 +198,7 @@ int main(int ac, char** av)
 #endif
 
 	end = sec();
-
+	
 	printf("%1.2f s\n", end - start);
 
 	free(a);

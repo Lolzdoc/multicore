@@ -10,10 +10,11 @@ OBJS		= main.o list.o error.o random.o set.o dataflow.o
 
 OUT		= live
 
-LDFLAGS		= -lpthread -static
+#LDFLAGS		= -lpthread -static
+LDFLAGS		= -lpthread 
 
-S=10
-V=10
+S=100
+V=100
 U=4
 A=10
 T=4

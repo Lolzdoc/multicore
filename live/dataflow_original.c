@@ -11,8 +11,6 @@
 
 typedef struct vertex_t	vertex_t;
 typedef struct task_t	task_t;
-static pthread_mutex_t worklist_mutex;
-static list_t*	worklist;
 
 /* cfg_t: a control flow graph. */
 struct cfg_t {
@@ -20,7 +18,6 @@ struct cfg_t {
 	size_t			nsymbol;	/* width of bitvectors		*/
 	vertex_t*		vertex;		/* array of vertex		*/
 };
-
 
 /* vertex_t: a control flow graph vertex. */
 struct vertex_t {
@@ -31,12 +28,10 @@ struct vertex_t {
 	vertex_t**		succ;		/* successor vertices 		*/
 	list_t*			pred;		/* predecessor vertices		*/
 	bool			listed;		/* on worklist			*/
-	pthread_mutex_t mymutex;
 };
 
 static void clean_vertex(vertex_t* v);
 static void init_vertex(vertex_t* v, size_t index, size_t nsymbol, size_t max_succ);
-
 
 cfg_t* new_cfg(size_t nvertex, size_t nsymbol, size_t max_succ)
 {
@@ -118,128 +113,57 @@ void setbit(cfg_t* cfg, size_t v, set_type_t type, size_t index)
 {
 	set(cfg->vertex[v].set[type], index);
 }
-void* compute_in() {
+
+void liveness(cfg_t* cfg)
+{
 	vertex_t*	u;
 	vertex_t*	v;
+	set_t*		prev;
+	size_t		i;
+	size_t		j;
+	list_t*		worklist;
 	list_t*		p;
 	list_t*		h;
-	size_t		j;
-	set_t*		prev;
 
-	printf("asd%d\n",length(worklist));
+	worklist = NULL;
 
-	pthread_mutex_lock(&worklist_mutex); // Lock Worklist
+	for (i = 0; i < cfg->nvertex; ++i) {
+		u = &cfg->vertex[i];
 
-	u = remove_first(&worklist);
-	if (u != NULL){
+		insert_last(&worklist, u);
+		u->listed = true;
+	}
+
+	while ((u = remove_first(&worklist)) != NULL) {
 		u->listed = false;
-		pthread_mutex_lock(&(u->mymutex)); // Lock current Vertex
-	}	
 
+		reset(u->set[OUT]);
 
-	pthread_mutex_unlock(&worklist_mutex);  // Unlock Worklist
-
-	while (u != NULL) {
-
-		reset(u->set[OUT]); // Set bitset to zero
-
-		for (j = 0; j < u->nsucc; ++j) {
-			pthread_mutex_lock(&(u->succ[j]->mymutex)); // Lock succ[j] Vertex 
+		for (j = 0; j < u->nsucc; ++j)
 			or(u->set[OUT], u->set[OUT], u->succ[j]->set[IN]);
-			pthread_mutex_unlock(&(u->succ[j]->mymutex)); // Unlock succ[j] Vertex 
-		}
-		
+
 		prev = u->prev;
 		u->prev = u->set[IN];
 		u->set[IN] = prev;
+
 		/* in our case liveness information... */
 		propagate(u->set[IN], u->set[OUT], u->set[DEF], u->set[USE]);
-		pthread_mutex_unlock(&(u->mymutex)); // Unlock current vertex
 
 		if (u->pred != NULL && !equal(u->prev, u->set[IN])) {
 			p = h = u->pred;
 			do {
 				v = p->data;
-					pthread_mutex_lock(&(v->mymutex)); // Lock pred vertex;
 				if (!v->listed) {
-					pthread_mutex_lock(&worklist_mutex); // Lock worklist
 					v->listed = true;
 					insert_last(&worklist, v);
-					
-					pthread_mutex_unlock(&worklist_mutex); // Unlock Worklist
 				}
-					pthread_mutex_unlock(&(v->mymutex)); // Unlock pred vertex;
+
 				p = p->succ;
 
 			} while (p != h);
 		}
-
-
-
-		pthread_mutex_lock(&worklist_mutex);
-		 // Lock worklist
-		u = remove_first(&worklist);
-		
-		pthread_mutex_unlock(&worklist_mutex); // Unlock worklist
-		
-		if(u != NULL){			//
-		pthread_mutex_lock(&(u->mymutex)); // Lock new Current vertex
-		u->listed = false;
 	}
-
-	}
-	return 0;
 }
-
-
-void liveness(cfg_t* cfg)
-{
-	vertex_t* u;
-	
-	
-	worklist = NULL;
-
-	pthread_mutexattr_t attrmutex;
-	pthread_mutexattr_init(&attrmutex);
-	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
-	pthread_mutexattr_settype(&attrmutex, PTHREAD_MUTEX_ERRORCHECK_NP); 
-	int a = pthread_mutex_init(&worklist_mutex, &attrmutex);
-	if (a != 0) {
-		printf("ERROR no %dmutex create\n",a );
-		abort();
-	}
-
-
-	int nthread = 4;
-
-	for (size_t i = 0; i < cfg->nvertex; ++i) {
-		u = &cfg->vertex[i];
-		int a = pthread_mutex_init(&(u->mymutex),&attrmutex);
-		if (a != 0) {
-		printf("ERROR no %dmutex create\n",a );
-		}
-		insert_last(&(worklist), u);
-		u->listed = true;
-	
-	}
-	// Threading starts after this
-
-	pthread_t threads[nthread];
-	for (int k = 0; k < nthread; k++) {
-		printf("started Thread %d\n", k+1);
-		pthread_create(&(threads[k]),NULL,&compute_in,NULL);
-	}
-
-	for (int k = 0; k < nthread; k++) {
-		pthread_join(threads[k],NULL);
-		printf("Ended thread\n");
-	}
-
-	pthread_mutex_destroy(&worklist_mutex);
-	pthread_mutexattr_destroy(&attrmutex); 
-}
-
-
 
 void print_sets(cfg_t* cfg, FILE *fp)
 {

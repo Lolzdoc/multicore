@@ -1,3 +1,50 @@
-gcc -O3 -Wall -pedantic -std=c99   -c -o dataflow.o dataflow.c
-gcc -O3 -Wall -pedantic -std=c99 main.o list.o error.o random.o set.o dataflow.o -lpthread -static -o live
+gcc -O3 -Wall -pedantic -std=c99 main.o list.o error.o random.o set.o dataflow.o -lpthread  -o live
 valgrind --tool=helgrind ./live 100 100 4 10 4 0 
+nsymbol   = 100
+nvertex   = 100
+max-succ  = 4
+nactive   = 10
+pid 20674
+generating cfg...
+generating usedefs...
+liveness...
+
+started Thread 1
+asd100
+started Thread 2
+asd0
+started Thread 3
+asd0
+started Thread 4
+asd0
+Ended thread
+Ended thread
+Ended thread
+Ended thread
+T =   0.1376 s
+
+#valgrind --tool=memcheck --track-origins=yes ./live 100 100 4 10 4 0 
+./live 100 100 4 10 4 0
+nsymbol   = 100
+nvertex   = 100
+max-succ  = 4
+nactive   = 10
+pid 20680
+generating cfg...
+generating usedefs...
+liveness...
+
+started Thread 1
+started Thread 2
+started Thread 3
+started Thread 4
+asd100
+asd0
+asd0
+asd0
+Ended thread
+Ended thread
+Ended thread
+Ended thread
+T =   0.0003 s
+

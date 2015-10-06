@@ -11,8 +11,8 @@
 
 typedef struct vertex_t	vertex_t;
 typedef struct task_t	task_t;
-static pthread_mutex_t worklist_mutex;
-static list_t*	worklist;
+pthread_mutex_t worklist_mutex;
+list_t*	worklist;
 
 /* cfg_t: a control flow graph. */
 struct cfg_t {
@@ -31,7 +31,7 @@ struct vertex_t {
 	vertex_t**		succ;		/* successor vertices 		*/
 	list_t*			pred;		/* predecessor vertices		*/
 	bool			listed;		/* on worklist			*/
-	pthread_mutex_t mymutex;
+	pthread_mutex_t* mymutex;
 };
 
 static void clean_vertex(vertex_t* v);
@@ -126,27 +126,32 @@ void* compute_in() {
 	size_t		j;
 	set_t*		prev;
 
-	printf("asd%d\n",length(worklist));
 
-	pthread_mutex_lock(&worklist_mutex); // Lock Worklist
+	int a = pthread_mutex_lock(&worklist_mutex); // Lock Worklist
+	if (a != 0){
+		error("woklist_mutex Locking");
+	}
 
 	u = remove_first(&worklist);
 	if (u != NULL){
 		u->listed = false;
-		pthread_mutex_lock(&(u->mymutex)); // Lock current Vertex
+		pthread_mutex_lock(u->mymutex); // Lock current Vertex
 	}	
 
-
-	pthread_mutex_unlock(&worklist_mutex);  // Unlock Worklist
+	a = pthread_mutex_unlock(&worklist_mutex);  // Unlock Worklist
+	if (a != 0){
+		error("woklist_mutex unlocking");
+	}
 
 	while (u != NULL) {
 
 		reset(u->set[OUT]); // Set bitset to zero
 
 		for (j = 0; j < u->nsucc; ++j) {
-			pthread_mutex_lock(&(u->succ[j]->mymutex)); // Lock succ[j] Vertex 
-			or(u->set[OUT], u->set[OUT], u->succ[j]->set[IN]);
-			pthread_mutex_unlock(&(u->succ[j]->mymutex)); // Unlock succ[j] Vertex 
+			//pthread_mutex_lock(u->succ[j]->mymutex); // Lock succ[j] Vertex 
+			set_t* set = u->succ[j]->set[IN];
+			//pthread_mutex_unlock(u->succ[j]->mymutex); // Unlock succ[j] Vertex 
+			or(u->set[OUT], u->set[OUT], set);
 		}
 		
 		prev = u->prev;
@@ -154,21 +159,22 @@ void* compute_in() {
 		u->set[IN] = prev;
 		/* in our case liveness information... */
 		propagate(u->set[IN], u->set[OUT], u->set[DEF], u->set[USE]);
-		pthread_mutex_unlock(&(u->mymutex)); // Unlock current vertex
+		pthread_mutex_unlock(u->mymutex); // Unlock current vertex
 
 		if (u->pred != NULL && !equal(u->prev, u->set[IN])) {
 			p = h = u->pred;
+			//printf("asd%d\n",length(worklist));
 			do {
 				v = p->data;
-					pthread_mutex_lock(&(v->mymutex)); // Lock pred vertex;
-				if (!v->listed) {
+					//pthread_mutex_lock(&(v->mymutex)); // Lock pred vertex;
+				if (!(v->listed)) {
 					pthread_mutex_lock(&worklist_mutex); // Lock worklist
 					v->listed = true;
 					insert_last(&worklist, v);
 					
 					pthread_mutex_unlock(&worklist_mutex); // Unlock Worklist
 				}
-					pthread_mutex_unlock(&(v->mymutex)); // Unlock pred vertex;
+					//pthread_mutex_unlock(&(v->mymutex)); // Unlock pred vertex;
 				p = p->succ;
 
 			} while (p != h);
@@ -183,7 +189,7 @@ void* compute_in() {
 		pthread_mutex_unlock(&worklist_mutex); // Unlock worklist
 		
 		if(u != NULL){			//
-		pthread_mutex_lock(&(u->mymutex)); // Lock new Current vertex
+		pthread_mutex_lock(u->mymutex); // Lock new Current vertex
 		u->listed = false;
 	}
 
@@ -198,7 +204,6 @@ void liveness(cfg_t* cfg)
 	
 	
 	worklist = NULL;
-
 	pthread_mutexattr_t attrmutex;
 	pthread_mutexattr_init(&attrmutex);
 	pthread_mutexattr_setpshared(&attrmutex, PTHREAD_PROCESS_SHARED);
@@ -210,14 +215,18 @@ void liveness(cfg_t* cfg)
 	}
 
 
-	int nthread = 4;
+	int nthread = 6;
 
 	for (size_t i = 0; i < cfg->nvertex; ++i) {
 		u = &cfg->vertex[i];
-		int a = pthread_mutex_init(&(u->mymutex),&attrmutex);
+		pthread_mutex_t mutex;
+		int a = pthread_mutex_init(&mutex,&attrmutex);
 		if (a != 0) {
 		printf("ERROR no %dmutex create\n",a );
 		}
+		u->mymutex = &mutex;
+
+
 		insert_last(&(worklist), u);
 		u->listed = true;
 	

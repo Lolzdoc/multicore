@@ -104,7 +104,7 @@ int main(int argc, char** argv)
 		print	 	= atoi(argv[6]);
 	} else {
 		nsym	 	= 100;
-		n		= 10;
+		n			= 10;
 		max_succ	= 4;
 		nactive	 	= 10;
 		print		= 1;

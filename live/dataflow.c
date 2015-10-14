@@ -175,10 +175,10 @@ void* compute_in() {
 
 
 
-		pthread_mutex_unlock(u->mymutex); // Unlock current vertex
 
 		if (u->pred != NULL && !equal(u->prev, u->set[IN])) {
 			p = h = u->pred;
+		pthread_mutex_unlock(u->mymutex); // Unlock current vertex
 			//printf("asd%d\n",length(worklist));
 			do {
 				v = p->data;
@@ -196,6 +196,8 @@ void* compute_in() {
 				p = p->succ;
 
 			} while (p != h);
+		} else {
+			pthread_mutex_unlock(u->mymutex); // Unlock current vertex
 		}
 
 

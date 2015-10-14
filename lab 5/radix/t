@@ -1,0 +1,11 @@
+#!/bin/bash
+
+echo ===============================================================
+echo compiling...
+
+# LINUX
+#clang++ -O3 main.cpp RadixSort.cpp -lOpenCL -std=c++11
+
+# APPLE
+clang++ -O3 main.cpp RadixSort.cpp -framework OpenCL -std=c++11 &&
+./a.out

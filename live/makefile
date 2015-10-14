@@ -13,18 +13,18 @@ OUT		= live
 #LDFLAGS		= -lpthread -static
 LDFLAGS		= -lpthread 
 
-S=10000
-V=10000
+S=100
+V=10
 U=4
-A=100
+A=10
 T=4
-P=0
+P=1
 
 all: $(OBJS)	
 	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $(OUT)
-	valgrind --tool=helgrind ./$(OUT) $(S) $(V) $(U) $(A) $(T) $(P) $(L)
+	#valgrind --tool=helgrind ./$(OUT) $(S) $(V) $(U) $(A) $(T) $(P) $(L)
 	#valgrind --tool=memcheck --track-origins=yes ./$(OUT) $(S) $(V) $(U) $(A) $(T) $(P) $(L)
-	#./$(OUT) $(S) $(V) $(U) $(A) $(T) $(P)
+	./$(OUT) $(S) $(V) $(U) $(A) $(T) $(P)
 
 clean:
 	rm -f $(OUT) $(OBJS) cfg.dot
